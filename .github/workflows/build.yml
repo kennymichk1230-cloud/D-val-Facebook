@@ -30,13 +30,15 @@ jobs:
         run: |
           mkdir -p gradle/wrapper
 
-          curl -fL \
-            https://raw.githubusercontent.com/gradle/gradle/v9.3.1/gradle/wrapper/gradle-wrapper.jar \
-            -o gradle/wrapper/gradle-wrapper.jar
-
-          curl -fL \
-            https://raw.githubusercontent.com/gradle/gradle/master/gradle/wrapper/gradle-wrapper.jar \
-            -o gradle/wrapper/gradle-wrapper.jar
+          if [ ! -s gradle/wrapper/gradle-wrapper.jar ]; then
+            echo "Gradle wrapper jar missing or empty, fetching..."
+            curl -fL \
+              https://raw.githubusercontent.com/gradle/gradle/v9.3.1/gradle/wrapper/gradle-wrapper.jar \
+              -o gradle/wrapper/gradle-wrapper.jar || \
+            curl -fL \
+              https://raw.githubusercontent.com/gradle/gradle/master/gradle/wrapper/gradle-wrapper.jar \
+              -o gradle/wrapper/gradle-wrapper.jar
+          fi
 
           chmod +x gradlew
 
