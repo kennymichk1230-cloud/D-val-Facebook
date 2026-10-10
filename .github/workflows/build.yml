@@ -26,15 +26,15 @@ jobs:
           distribution: "temurin"
           cache: gradle
 
-      - name: Heal Gradle Wrapper
+      - name: Set up Gradle Wrapper
         run: |
-          echo "Checking Gradle Wrapper..."
           mkdir -p gradle/wrapper
 
-          curl -f -L \
+          curl -fL \
             https://raw.githubusercontent.com/gradle/gradle/v9.3.1/gradle/wrapper/gradle-wrapper.jar \
-            -o gradle/wrapper/gradle-wrapper.jar || \
-          curl -f -L \
+            -o gradle/wrapper/gradle-wrapper.jar
+
+          curl -fL \
             https://raw.githubusercontent.com/gradle/gradle/master/gradle/wrapper/gradle-wrapper.jar \
             -o gradle/wrapper/gradle-wrapper.jar
 
