@@ -967,6 +967,18 @@ class MainActivity : ComponentActivity() {
                                     canGoForward = webViewInstance?.canGoForward() ?: false,
                                     onGoBack = { webViewInstance?.goBack() },
                                     onGoForward = { webViewInstance?.goForward() },
+                                    onNavigateHome = {
+                                        showMenu = false
+                                        webViewInstance?.loadUrl("https://m.facebook.com/")
+                                    },
+                                    onNavigateWatch = {
+                                        showMenu = false
+                                        webViewInstance?.loadUrl("https://m.facebook.com/watch/")
+                                    },
+                                    onNavigateAlerts = {
+                                        showMenu = false
+                                        webViewInstance?.loadUrl("https://m.facebook.com/notifications/")
+                                    },
                                     currentVersionName = currentVersionName,
                                     onCheckForUpdates = {
                                         showMenu = false
@@ -993,21 +1005,6 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         }
-
-                        // 3. Geometric Bottom Navigation (matches bottom nav class bg-[#2B2930])
-                        GeometricBottomNav(
-                            currentUrl = currentUrl,
-                            showMenu = showMenu,
-                            onTabSelected = { tab ->
-                                showMenu = false
-                                when (tab) {
-                                    "home" -> webViewInstance?.loadUrl("https://m.facebook.com/")
-                                    "video" -> webViewInstance?.loadUrl("https://m.facebook.com/watch/")
-                                    "alerts" -> webViewInstance?.loadUrl("https://m.facebook.com/notifications/")
-                                    "menu" -> showMenu = true
-                                }
-                            }
-                        )
                     }
 
                     // Splash Overlay
@@ -1590,77 +1587,6 @@ class MainActivity : ComponentActivity() {
 }
 
 /**
- * Geometric Bottom Navigation matching exact HTML spec color guidelines
- */
-@Composable
-fun GeometricBottomNav(
-    currentUrl: String,
-    showMenu: Boolean,
-    onTabSelected: (String) -> Unit
-) {
-    val activeTab = when {
-        showMenu -> "menu"
-        currentUrl.contains("watch") || currentUrl.contains("video") -> "video"
-        currentUrl.contains("notifications") || currentUrl.contains("message") -> "alerts"
-        else -> "home"
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(64.dp)
-            .background(Color(0xFF2B2930))
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceAround,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        listOf(
-            Triple("home", Icons.Default.Home, "Home"),
-            Triple("video", Icons.Default.PlayArrow, "Video"),
-            Triple("alerts", Icons.Default.Notifications, "Alerts"),
-            Triple("menu", Icons.Default.Menu, "Menu")
-        ).forEach { (id, icon, label) ->
-            val isActive = activeTab == id
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { onTabSelected(id) },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                // Pill highlight container matching active classes in design HTML
-                Box(
-                    modifier = Modifier
-                        .width(52.dp)
-                        .height(28.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(if (isActive) Color(0xFFEADDFF) else Color.Transparent),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = label,
-                        tint = if (isActive) Color(0xFF21005D) else Color(0xFFE6E1E5).copy(alpha = 0.6f),
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.height(3.dp))
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-                        color = Color(0xFFE6E1E5),
-                        fontSize = 11.sp,
-                        letterSpacing = 0.5.sp
-                    ),
-                    modifier = Modifier.graphicsLayer { alpha = if (isActive) 1.0f else 0.6f }
-                )
-            }
-        }
-    }
-}
-
-/**
  * Geometric Balance Settings Menu Drawer Overlay (at the top)
  */
 @Composable
@@ -1673,6 +1599,9 @@ fun SettingsOverlayMenu(
     canGoForward: Boolean,
     onGoBack: () -> Unit,
     onGoForward: () -> Unit,
+    onNavigateHome: (() -> Unit)? = null,
+    onNavigateWatch: (() -> Unit)? = null,
+    onNavigateAlerts: (() -> Unit)? = null,
     currentVersionName: String,
     onCheckForUpdates: () -> Unit,
     onSimulateUpdate: () -> Unit
@@ -1768,6 +1697,74 @@ fun SettingsOverlayMenu(
                             contentDescription = "Go Forward",
                             modifier = Modifier.size(16.dp)
                         )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Quick Navigation Destinations (Home, Watch, Alerts)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = { onNavigateHome?.invoke() },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF49454F),
+                            contentColor = Color(0xFFE6E1E5)
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Home,
+                            contentDescription = "Home",
+                            modifier = Modifier.size(16.dp),
+                            tint = Color(0xFFD0BCFF)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Home", fontSize = 12.sp)
+                    }
+
+                    Button(
+                        onClick = { onNavigateWatch?.invoke() },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF49454F),
+                            contentColor = Color(0xFFE6E1E5)
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Watch Videos",
+                            modifier = Modifier.size(16.dp),
+                            tint = Color(0xFFD0BCFF)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Watch", fontSize = 12.sp)
+                    }
+
+                    Button(
+                        onClick = { onNavigateAlerts?.invoke() },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF49454F),
+                            contentColor = Color(0xFFE6E1E5)
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Notifications,
+                            contentDescription = "Notifications",
+                            modifier = Modifier.size(16.dp),
+                            tint = Color(0xFFD0BCFF)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Alerts", fontSize = 12.sp)
                     }
                 }
 
