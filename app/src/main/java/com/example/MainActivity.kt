@@ -592,7 +592,6 @@ class MainActivity : ComponentActivity() {
                 var isDesktopSite by remember { mutableStateOf(false) }
                 var showMenu by remember { mutableStateOf(false) }
                 var currentUrl by remember { mutableStateOf("https://m.facebook.com") }
-                var urlInputText by remember { mutableStateOf("https://m.facebook.com") }
 
                 // --- Self-Update System States ---
                 var updateState by remember { mutableStateOf<UpdateSystemState>(UpdateSystemState.Idle) }
@@ -605,35 +604,7 @@ class MainActivity : ComponentActivity() {
                 val coroutineScope = rememberCoroutineScope()
                 val context = LocalContext.current
 
-                // Check for updates on startup and once every 24 hours
-                LaunchedEffect(Unit) {
-                    delay(3500) // Let splash screen load cleanly
-                    coroutineScope.launch {
-                        val sharedPrefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
-                        
-                        suspend fun runCheck() {
-                            val info = performUpdateCheck()
-                            if (info != null && isNewerVersion(currentVersionName, info.versionName)) {
-                                updateState = UpdateSystemState.UpdateAvailable(info)
-                                showUpdateNotification(context, info)
-                            }
-                            sharedPrefs.edit().putLong("last_update_check_time", System.currentTimeMillis()).apply()
-                        }
-
-                        // Always check on startup
-                        runCheck()
-
-                        // Check periodically every 24 hours
-                        while (isActive) {
-                            delay(60 * 60 * 1000) // check hourly if the 24 hours has passed
-                            val lastCheck = sharedPrefs.getLong("last_update_check_time", 0L)
-                            val now = System.currentTimeMillis()
-                            if (now - lastCheck >= 24 * 60 * 60 * 1000) {
-                                runCheck()
-                            }
-                        }
-                    }
-                }
+                // Update checks are initiated explicitly by the user from the menu - no auto-popup dialogs on startup
 
                 fun startUpdateDownload(info: UpdateInfo) {
                     updateState = UpdateSystemState.Downloading(info)
@@ -728,37 +699,14 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                LaunchedEffect(currentUrl) {
-                    urlInputText = currentUrl
-                }
-
-                fun navigateToUrl(input: String) {
-                    var targetUrl = input.trim()
-                    if (targetUrl.isEmpty()) return
-                    
-                    // If it's a sub-page of facebook (e.g. "messages", "/messages", "notifications")
-                    if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://") && !targetUrl.contains(".")) {
-                        val cleanPath = if (targetUrl.startsWith("/")) targetUrl.substring(1) else targetUrl
-                        targetUrl = if (isDesktopSite) {
-                            "https://www.facebook.com/$cleanPath"
-                        } else {
-                            "https://m.facebook.com/$cleanPath"
-                        }
-                    } else if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
-                        targetUrl = "https://$targetUrl"
-                    }
-                    
-                    webViewInstance?.loadUrl(targetUrl)
-                }
-
-                // Dismiss splash screen after 2.5s
+                // Dismiss splash screen quickly to show complete screen immediately
                 LaunchedEffect(Unit) {
-                    delay(2500)
+                    delay(1200)
                     showSplash = false
                 }
 
                 // Handle system Back button inside the WebView before exiting the app
-                BackHandler(enabled = canGoBack && !showSplash) {
+                BackHandler(enabled = showMenu || (canGoBack && !showSplash)) {
                     if (showMenu) {
                         showMenu = false
                     } else {
@@ -769,243 +717,129 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     containerColor = Color(0xFF1C1B1F), // Match Geometric Balance background
-                    contentWindowInsets = WindowInsets.safeDrawing
-                ) { innerPadding ->
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(innerPadding)
-                    ) {
-                        // 1. Geometric Header (matches header tag class, bg-[#1C1B1F])
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp)
-                                .background(Color(0xFF1C1B1F))
-                                .padding(horizontal = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            // Hamburger menu/options button
-                            IconButton(
-                                onClick = { showMenu = !showMenu },
-                                modifier = Modifier.size(40.dp)
+                    contentWindowInsets = WindowInsets.safeDrawing,
+                    floatingActionButton = {
+                        if (!showSplash) {
+                            FloatingActionButton(
+                                onClick = { showMenu = true },
+                                modifier = Modifier
+                                    .padding(bottom = 8.dp, end = 8.dp)
+                                    .size(44.dp)
+                                    .testTag("menu_fab"),
+                                shape = CircleShape,
+                                containerColor = Color(0xFF2B2930).copy(alpha = 0.85f),
+                                contentColor = Color(0xFFD0BCFF),
+                                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 2.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Menu,
-                                    contentDescription = "Menu Drawer",
-                                    tint = Color(0xFFE6E1E5)
-                                )
-                            }
-
-                            // Address/Status container (matches div classbg-[#49454F] rounded-2xl)
-                            Row(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(40.dp)
-                                    .padding(horizontal = 8.dp)
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(Color(0xFF49454F))
-                                    .border(
-                                        1.dp,
-                                        if (showMenu) Color(0xFFD0BCFF) else Color.Transparent,
-                                        RoundedCornerShape(16.dp)
-                                    )
-                                    .padding(horizontal = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = "Secure Lock",
-                                    tint = Color(0xFFD0BCFF),
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                
-                                BasicTextField(
-                                    value = urlInputText,
-                                    onValueChange = { urlInputText = it },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .testTag("url_input_field"),
-                                    singleLine = true,
-                                    textStyle = androidx.compose.ui.text.TextStyle(
-                                        color = Color.White,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    keyboardOptions = KeyboardOptions(
-                                        keyboardType = KeyboardType.Uri,
-                                        imeAction = ImeAction.Go
-                                    ),
-                                    keyboardActions = KeyboardActions(
-                                        onGo = {
-                                            navigateToUrl(urlInputText)
-                                        }
-                                    ),
-                                    cursorBrush = SolidColor(Color(0xFFD0BCFF)),
-                                    decorationBox = { innerTextField ->
-                                        Box(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            contentAlignment = Alignment.CenterStart
-                                        ) {
-                                            if (urlInputText.isEmpty()) {
-                                                Text(
-                                                    text = "Enter URL or page...",
-                                                    color = Color(0xFFCAC4D0).copy(alpha = 0.6f),
-                                                    style = MaterialTheme.typography.bodySmall
-                                                )
-                                            }
-                                            innerTextField()
-                                        }
-                                    }
-                                )
-
-                                if (urlInputText.isNotEmpty()) {
-                                    IconButton(
-                                        onClick = { navigateToUrl(urlInputText) },
-                                        modifier = Modifier.size(24.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.ArrowForward,
-                                            contentDescription = "Navigate to URL",
-                                            tint = Color(0xFFD0BCFF),
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Refresh button
-                            IconButton(
-                                onClick = { webViewInstance?.reload() },
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = "Refresh Page",
-                                    tint = Color(0xFFE6E1E5)
-                                )
-                            }
-                        }
-
-                        // Thin custom loading line (matches h-1 class)
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(3.dp)
-                                .background(Color(0xFF1C1B1F))
-                        ) {
-                            if (isLoading && !showSplash) {
-                                LinearProgressIndicator(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    color = Color(0xFFD0BCFF),
-                                    trackColor = Color.Transparent
-                                )
-                            }
-                        }
-
-                        // 2. Main WebView view area
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f)
-                        ) {
-                            WebViewScreen(
-                                initialUrl = currentUrl,
-                                isDesktopSite = isDesktopSite,
-                                onPageStarted = { url ->
-                                    isLoading = true
-                                    errorOccurred = false
-                                    currentUrl = url
-                                },
-                                onPageFinished = { url ->
-                                    isLoading = false
-                                    currentUrl = url
-                                    canGoBack = webViewInstance?.canGoBack() ?: false
-                                    CookieManager.getInstance().flush()
-                                },
-                                onReceivedError = {
-                                    errorOccurred = true
-                                    isLoading = false
-                                },
-                                modifier = Modifier.fillMaxSize()
-                            )
-
-                            // Network recovery/offline dialog overlay
-                            if (errorOccurred) {
-                                NetworkErrorView(
-                                    onRetry = {
-                                        errorOccurred = false
-                                        isLoading = true
-                                        webViewInstance?.reload()
-                                    },
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
-
-                            // Custom animated settings overlay panel
-                            androidx.compose.animation.AnimatedVisibility(
-                                visible = showMenu,
-                                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
-                                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                SettingsOverlayMenu(
-                                    isDesktopSite = isDesktopSite,
-                                    onToggleDesktopSite = { isDesktopSite = !isDesktopSite },
-                                    onClearCache = {
-                                        webViewInstance?.clearCache(true)
-                                        val cookieManager = CookieManager.getInstance()
-                                        cookieManager.removeAllCookies(null)
-                                        cookieManager.flush()
-                                        Toast.makeText(this@MainActivity, "Storage optimized!", Toast.LENGTH_SHORT).show()
-                                    },
-                                    onClose = { showMenu = false },
-                                    canGoBack = canGoBack,
-                                    canGoForward = webViewInstance?.canGoForward() ?: false,
-                                    onGoBack = { webViewInstance?.goBack() },
-                                    onGoForward = { webViewInstance?.goForward() },
-                                    onNavigateHome = {
-                                        showMenu = false
-                                        webViewInstance?.loadUrl("https://m.facebook.com/")
-                                    },
-                                    onNavigateWatch = {
-                                        showMenu = false
-                                        webViewInstance?.loadUrl("https://m.facebook.com/watch/")
-                                    },
-                                    onNavigateAlerts = {
-                                        showMenu = false
-                                        webViewInstance?.loadUrl("https://m.facebook.com/notifications/")
-                                    },
-                                    currentVersionName = currentVersionName,
-                                    onCheckForUpdates = {
-                                        showMenu = false
-                                        coroutineScope.launch {
-                                            Toast.makeText(this@MainActivity, "Checking for updates...", Toast.LENGTH_SHORT).show()
-                                            val info = performUpdateCheck()
-                                            if (info != null && isNewerVersion(currentVersionName, info.versionName)) {
-                                                updateState = UpdateSystemState.UpdateAvailable(info)
-                                            } else {
-                                                Toast.makeText(this@MainActivity, "No updates available (Current version is up-to-date: v$currentVersionName)", Toast.LENGTH_LONG).show()
-                                            }
-                                        }
-                                    },
-                                    onSimulateUpdate = {
-                                        showMenu = false
-                                        val mockInfo = UpdateInfo(
-                                            versionCode = 999,
-                                            versionName = "9.9",
-                                            downloadUrl = "https://raw.githubusercontent.com/sheilaj08102/fb-lite-updater/main/dummy.apk",
-                                            updateMessage = "This is a simulated update to demonstrate the polished Material 3 self-update flow.\n\nIt features live download progress tracking, adaptive layouts, and a secure FileProvider installer trigger!"
-                                        )
-                                        updateState = UpdateSystemState.UpdateAvailable(mockInfo)
-                                    }
+                                    contentDescription = "Open Settings & Updates",
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
                     }
+                ) { innerPadding ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                    ) {
+                        // Complete full screen WebView (no top bar, no address/loading header)
+                        WebViewScreen(
+                            initialUrl = currentUrl,
+                            isDesktopSite = isDesktopSite,
+                            onPageStarted = { url ->
+                                isLoading = true
+                                errorOccurred = false
+                                currentUrl = url
+                            },
+                            onPageFinished = { url ->
+                                isLoading = false
+                                showSplash = false
+                                currentUrl = url
+                                canGoBack = webViewInstance?.canGoBack() ?: false
+                                CookieManager.getInstance().flush()
+                            },
+                            onReceivedError = {
+                                errorOccurred = true
+                                isLoading = false
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+
+                        // Network recovery/offline dialog overlay
+                        if (errorOccurred) {
+                            NetworkErrorView(
+                                onRetry = {
+                                    errorOccurred = false
+                                    isLoading = true
+                                    webViewInstance?.reload()
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+
+                        // Custom animated settings overlay panel
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = showMenu,
+                            enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+                            exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            SettingsOverlayMenu(
+                                isDesktopSite = isDesktopSite,
+                                onToggleDesktopSite = { isDesktopSite = !isDesktopSite },
+                                onClearCache = {
+                                    webViewInstance?.clearCache(true)
+                                    val cookieManager = CookieManager.getInstance()
+                                    cookieManager.removeAllCookies(null)
+                                    cookieManager.flush()
+                                    Toast.makeText(this@MainActivity, "Storage optimized!", Toast.LENGTH_SHORT).show()
+                                },
+                                onClose = { showMenu = false },
+                                canGoBack = canGoBack,
+                                canGoForward = webViewInstance?.canGoForward() ?: false,
+                                onGoBack = { webViewInstance?.goBack() },
+                                onGoForward = { webViewInstance?.goForward() },
+                                onNavigateHome = {
+                                    showMenu = false
+                                    webViewInstance?.loadUrl("https://m.facebook.com/")
+                                },
+                                onNavigateWatch = {
+                                    showMenu = false
+                                    webViewInstance?.loadUrl("https://m.facebook.com/watch/")
+                                },
+                                onNavigateAlerts = {
+                                    showMenu = false
+                                    webViewInstance?.loadUrl("https://m.facebook.com/notifications/")
+                                },
+                                currentVersionName = currentVersionName,
+                                onCheckForUpdates = {
+                                    showMenu = false
+                                    coroutineScope.launch {
+                                        Toast.makeText(this@MainActivity, "Checking for real updates...", Toast.LENGTH_SHORT).show()
+                                        val info = performUpdateCheck()
+                                        if (info != null) {
+                                            if (isNewerVersion(currentVersionName, info.versionName)) {
+                                                updateState = UpdateSystemState.UpdateAvailable(info)
+                                            } else {
+                                                // Real update download for latest GitHub release
+                                                updateState = UpdateSystemState.UpdateAvailable(
+                                                    info.copy(
+                                                        updateMessage = "Current version: v$currentVersionName.\nLatest release on GitHub: v${info.versionName}.\n\nClick Update Now to download and install the latest APK build directly from GitHub Releases."
+                                                    )
+                                                )
+                                            }
+                                        } else {
+                                            Toast.makeText(this@MainActivity, "Unable to check updates. Please check your internet connection.", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
 
                     // Splash Overlay
                     AnimatedVisibility(
@@ -1113,7 +947,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-    }
 
     override fun onPause() {
         super.onPause()
@@ -1603,8 +1436,7 @@ fun SettingsOverlayMenu(
     onNavigateWatch: (() -> Unit)? = null,
     onNavigateAlerts: (() -> Unit)? = null,
     currentVersionName: String,
-    onCheckForUpdates: () -> Unit,
-    onSimulateUpdate: () -> Unit
+    onCheckForUpdates: () -> Unit
 ) {
     Box(
         modifier = Modifier
@@ -1881,7 +1713,7 @@ fun SettingsOverlayMenu(
                 HorizontalDivider(color = Color(0xFF49454F))
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Check for updates option
+                // Real Check & Download updates option
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1906,38 +1738,7 @@ fun SettingsOverlayMenu(
                             )
                         )
                         Text(
-                            text = "Fetch online version manifest",
-                            style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFFCAC4D0))
-                        )
-                    }
-                }
-
-                // Simulate update option
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable(onClick = onSimulateUpdate)
-                        .padding(vertical = 10.dp, horizontal = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Simulate update icon",
-                        tint = Color(0xFFD0BCFF),
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Column {
-                        Text(
-                            text = "Simulate Self-Update",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFFE6E1E5)
-                            )
-                        )
-                        Text(
-                            text = "Demo update UI and progress bar",
+                            text = "Download latest release directly from GitHub",
                             style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFFCAC4D0))
                         )
                     }
