@@ -49,7 +49,8 @@ android {
       
       val envPath = System.getenv("KEYSTORE_PATH")
       val keystorePath = if (envPath.isNullOrEmpty()) "${rootDir}/app/release.jks" else envPath
-      if (file(keystorePath).exists()) {
+      val ksFile = file(keystorePath)
+      if (ksFile.exists() && ksFile.length() > 0L) {
         signingConfig = signingConfigs.getByName("release")
       } else {
         signingConfig = signingConfigs.getByName("debug")

@@ -25,24 +25,23 @@ jobs:
           java-version: "21"
           distribution: "temurin"
 
-      - name: Set up Gradle Wrapper
+      - name: Set up Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "9.3.1"
+
+      - name: Ensure Valid Gradle Wrapper
         run: |
           mkdir -p gradle/wrapper
+          chmod +x gradlew 2>/dev/null || true
 
-          if [ ! -s gradle/wrapper/gradle-wrapper.jar ]; then
-            echo "Gradle wrapper jar missing or empty, fetching..."
-            curl -fL \
-              https://raw.githubusercontent.com/gradle/gradle/v9.3.1/gradle/wrapper/gradle-wrapper.jar \
-              -o gradle/wrapper/gradle-wrapper.jar || \
-            curl -fL \
-              https://raw.githubusercontent.com/gradle/gradle/master/gradle/wrapper/gradle-wrapper.jar \
-              -o gradle/wrapper/gradle-wrapper.jar
+          # Verify that gradle-wrapper.jar is a valid uncorrupted zip/jar
+          if ! unzip -tq gradle/wrapper/gradle-wrapper.jar >/dev/null 2>&1; then
+            echo "Gradle wrapper jar is missing or corrupted. Generating official wrapper..."
+            rm -f gradle/wrapper/gradle-wrapper.jar
+            gradle wrapper --gradle-version 9.3.1 --distribution-type bin
+            chmod +x gradlew
           fi
-
-          chmod +x gradlew
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
 
       - name: Decode Keystore
         shell: bash
@@ -54,6 +53,12 @@ jobs:
           if [ -n "$SIGNING_KEY" ]; then
             echo "Decoding release keystore from SIGNING_KEY secret..."
             echo "$SIGNING_KEY" | tr -d '\r\n' | base64 -d > app/release.jks
+
+            # If the keystore file is empty or invalid, clean it up to allow debug fallback
+            if [ ! -s app/release.jks ]; then
+              echo "Decoded keystore is empty. Removing to fall back to debug signing."
+              rm -f app/release.jks
+            fi
           else
             echo "SIGNING_KEY secret not set; build will use fallback signing configuration."
           fi
@@ -65,7 +70,11 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          ./gradlew clean assembleRelease --stacktrace
+          if [ -f "./gradlew" ] && unzip -tq gradle/wrapper/gradle-wrapper.jar >/dev/null 2>&1; then
+            ./gradlew clean assembleRelease --stacktrace
+          else
+            gradle clean assembleRelease --stacktrace
+          fi
 
       - name: Upload Release APK
         uses: actions/upload-artifact@v4
